@@ -1,0 +1,197 @@
+---
+title: "BLACK FRIDAY"
+author: "Thasin"
+date: "2024-11-05"
+output: html_document
+---
+
+```{r}
+library(readr)
+blackfriday_data <- read_csv("/Users/mazenalhaffar/Documents/Business Analytics/Bearlytics/Black Friday Sales Project/Kaggle - train.csv")
+head(blackfriday_data)
+```
+
+```{r}
+# Checking percentage of missing data
+library(naniar)
+
+pct_miss(blackfriday_data)
+miss_var_summary(blackfriday_data)
+```
+```{r}
+# Converting categorical variables into factors
+
+blackfriday_data$Gender = as.factor(blackfriday_data$Gender)
+blackfriday_data$Age = as.factor(blackfriday_data$Age)
+blackfriday_data$Occupation = as.factor(blackfriday_data$Occupation)
+blackfriday_data$City_Category = as.factor(blackfriday_data$City_Category)
+blackfriday_data$Marital_Status = as.factor(blackfriday_data$Marital_Status)
+blackfriday_data$Product_Category_1 = as.factor(blackfriday_data$Product_Category_1)
+blackfriday_data$Product_Category_2 = as.factor(blackfriday_data$Product_Category_2)
+blackfriday_data$Product_Category_3 = as.factor(blackfriday_data$Product_Category_3)
+
+str(blackfriday_data)
+```
+
+```{r}
+# Checking the rows with missing data
+
+which(is.na(blackfriday_data$Product_Category_1)) # Missing data for Product Category 1
+which(is.na(blackfriday_data$Product_Category_2)) # Missing data for Product Category 2
+which(is.na(blackfriday_data$Product_Category_3)) # Missing data for Product Category 3
+
+```
+
+```{r}
+summary(blackfriday_data)
+```
+
+```{r, message=FALSE}
+library(dplyr)
+
+blackfriday_data = blackfriday_data %>% filter(
+  !is.na(Product_Category_1),
+  !is.na(Product_Category_2),
+  !is.na(Product_Category_3)
+)
+
+str(blackfriday_data)
+```
+
+```{r}
+# Multiple linear regression all variables excluding User_ID and Product_ID
+
+model1 = lm(Purchase ~ . - User_ID - Product_ID, data = blackfriday_data)
+summary(model1)
+```
+
+```{r}
+library(corrr)
+library(ggcorrplot)
+
+library(FactoMineR)
+
+# Multiple linear regression excluding Age and Stay_In_Current_City_Years
+model2 = lm(Purchase ~ . - User_ID - Product_ID  - Stay_In_Current_City_Years - Age, data = blackfriday_data)
+summary(model2)
+```
+
+```{r}
+# lm with interaction term of occupation and city category
+model3 = lm(Purchase ~ . - User_ID - Product_ID, data = blackfriday_data)
+summary(model3)
+
+library(car)
+vif(model2)
+# vif was performed to determine variables with multicolinearity
+
+# after running vif, gender, occupation, and city category, and marital status were all low adjusted GVIF values, indicating little contribution of multicolinearity but the product categories were on the higher end
+```
+
+```{r}
+# multiple regression from model 3 but removing product_category_2
+model4 = lm(Purchase ~ . - User_ID - Product_ID  - Product_Category_2 + City_Category*Occupation, data = blackfriday_data)
+summary(model4)
+```
+
+```{r}
+plot(model4)
+```
+
+```{r}
+# Assuming you have predicted values
+blackfriday_data$Predicted <- predict(model4, newdata = blackfriday_data)
+
+# Actual vs Predicted plot
+ggplot(blackfriday_data, aes(x = Purchase, y = Predicted)) + geom_point(alpha = 0.5) + geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") + labs(title = "Actual vs Predicted Purchase", x = "Actual Purchase", y = "Predicted Purchase")
+```
+
+
+```{r}
+library(ggplot2)
+ggplot(blackfriday_data, aes(x = Gender)) + geom_bar(fill = "blue") + labs(title = "Distribution of Gender", x = "Gender", y = "Count")
+
+# Aggregate data: calculate mean Purchase by Gender
+agg_data <- blackfriday_data %>% 
+            group_by(Gender) %>% 
+            summarise(Average_Purchase = mean(Purchase, na.rm = TRUE))
+
+# Create the bar plot
+ggplot(agg_data, aes(x = Gender, y = Average_Purchase, fill = Gender)) + geom_bar(stat = "identity") + labs(title = "Average Purchase Amount by Gender", x = "Gender", y = "Average Purchase") + theme_minimal()
+```
+
+```{r}
+ggplot(blackfriday_data, aes(x = City_Category, fill = Gender)) + geom_bar(position = "stack") + labs(title = "City Category by Gender", x = "City Category", y = "Count")
+```
+```{r}
+#install.packages("ggmosaic")
+library(ggplot2)
+library(dplyr)
+
+# Calculate proportions for a 100% stacked bar chart
+blackfriday_data_summary <- blackfriday_data %>%
+  group_by(Gender, Age) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  group_by(Gender) %>%
+  mutate(Proportion = Count / sum(Count))  # Calculate proportions
+
+# Create the 100% stacked bar chart
+ggplot(blackfriday_data_summary, aes(x = Gender, y = Proportion, fill = Age)) +
+  geom_bar(stat = "identity", position = "fill") +  # 100% stacking
+  geom_text(aes(label = scales::percent(Proportion, accuracy = 1)), 
+            position = position_stack(vjust = 0.5), size = 3, fontface = "bold") +  # Add percentage labels
+  labs(title = "Gender by Age Distribution", 
+       x = "Gender", 
+       y = "Proportion (100%)") +
+  scale_y_continuous(labels = scales::percent_format()) +  # Format y-axis as percentage
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+```
+
+```{r}
+agg_data <- blackfriday_data %>%
+            group_by(Occupation) %>%
+            summarise(Total_Purchase = sum(Purchase, na.rm = TRUE))
+
+# Modify Total_Purchase to be in millions
+agg_data <- agg_data %>%
+            mutate(Total_Purchase_Millions = Total_Purchase / 1e6)
+
+# Create the bar plot
+ggplot(agg_data, aes(x = factor(Occupation), y = Total_Purchase_Millions, fill = factor(Occupation))) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Total Purchase Amount by Occupation",
+    x = "Occupation",
+    y = "Total Purchase (In Millions)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+ggplot(blackfriday_data, aes(x = Product_Category_2, y = Purchase)) + geom_point(alpha = 0.5) + labs(title = "Purchase vs Product Category 1", x = "Product Category 1", y = "Purchase Amount")
+
+ggplot(blackfriday_data, aes(x = Product_Category_2, y = Purchase)) + geom_point(alpha = 0.5) + labs(title = "Purchase vs Product Category 2", x = "Product Category 2", y = "Purchase Amount")
+
+ggplot(blackfriday_data, aes(x = Product_Category_3, y = Purchase)) + geom_point(alpha = 0.5) + labs(title = "Purchase vs Product Category 3", x = "Product Category 3", y = "Purchase Amount")
+```
+
+```{r}
+ggplot(blackfriday_data, aes(x = Purchase)) + geom_histogram(bins = 30, fill = "green", color = "black") + labs(title = "Distribution of Purchase Amount", x = "Purchase Amount", y = "Count")
+
+# Histogram of Purchase by Occupation
+ggplot(blackfriday_data, aes(x = Purchase, fill = factor(Occupation))) + geom_histogram(bins = 30, alpha = 0.6, position = "identity") + labs(title = "Histogram of Purchase Amount by Occupation", x = "Purchase Amount", y = "Count", fill = "Occupation")
+```
+
+```{r}
+# Melt the data to combine all product categories into one column
+library(tidyr)
+blackfriday_long <- blackfriday_data %>%
+                    pivot_longer(cols = c(Product_Category_1, Product_Category_2, Product_Category_3), names_to = "Product_Category", values_to = "Category_Value")
+
+# Histogram of Purchase by Product Categories
+ggplot(blackfriday_long, aes(x = Purchase, fill = Product_Category)) + geom_histogram(aes(y = ..count../tapply(..count.., ..x.., sum)[as.character(..x..)]), bins = 30, position = "stack") + labs(title = "100% Stacked Histogram of Purchase by Product Categories", x = "Purchase Amount", y = "Proportion", fill = "Product Category") + scale_y_continuous(labels = scales::percent_format()) + theme_minimal()
+```
+
